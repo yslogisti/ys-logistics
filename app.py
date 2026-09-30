@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS shipments (
     id BIGSERIAL PRIMARY KEY,
     tracking_id TEXT UNIQUE NOT NULL,
-    customer_id INTEGER,
+    customer_id BIGINT,
     origin_country TEXT NOT NULL,
     origin_city TEXT NOT NULL,
     origin_region TEXT,
@@ -119,25 +119,25 @@ CREATE TABLE IF NOT EXISTS shipments (
 );
 CREATE TABLE IF NOT EXISTS tracking_events (
     id BIGSERIAL PRIMARY KEY,
-    shipment_id INTEGER NOT NULL,
+    shipment_id BIGINT NOT NULL,
     event_time TEXT NOT NULL,
     location TEXT NOT NULL,
     status TEXT NOT NULL,
     description TEXT,
     FOREIGN KEY(shipment_id) REFERENCES shipments(id) ON DELETE CASCADE
 );
-CREATE TABLE IF NOT EXISTS support_threads (id BIGSERIAL PRIMARY KEY, shipment_id INTEGER NOT NULL, customer_id INTEGER, issue_type TEXT NOT NULL DEFAULT 'Shipment Issue', subject TEXT NOT NULL DEFAULT 'Shipment Support', status TEXT NOT NULL DEFAULT 'Open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(shipment_id) REFERENCES shipments(id) ON DELETE CASCADE, FOREIGN KEY(customer_id) REFERENCES users(id) ON DELETE SET NULL);
-CREATE TABLE IF NOT EXISTS support_messages (id BIGSERIAL PRIMARY KEY, thread_id INTEGER NOT NULL, sender_role TEXT NOT NULL, sender_user_id INTEGER, message TEXT NOT NULL DEFAULT '', attachment_path TEXT, created_at TEXT NOT NULL, customer_seen_at TEXT, admin_seen_at TEXT, FOREIGN KEY(thread_id) REFERENCES support_threads(id) ON DELETE CASCADE, FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE SET NULL);
+CREATE TABLE IF NOT EXISTS support_threads (id BIGSERIAL PRIMARY KEY, shipment_id BIGINT NOT NULL, customer_id BIGINT, issue_type TEXT NOT NULL DEFAULT 'Shipment Issue', subject TEXT NOT NULL DEFAULT 'Shipment Support', status TEXT NOT NULL DEFAULT 'Open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(shipment_id) REFERENCES shipments(id) ON DELETE CASCADE, FOREIGN KEY(customer_id) REFERENCES users(id) ON DELETE SET NULL);
+CREATE TABLE IF NOT EXISTS support_messages (id BIGSERIAL PRIMARY KEY, thread_id BIGINT NOT NULL, sender_role TEXT NOT NULL, sender_user_id BIGINT, message TEXT NOT NULL DEFAULT '', attachment_path TEXT, created_at TEXT NOT NULL, customer_seen_at TEXT, admin_seen_at TEXT, FOREIGN KEY(thread_id) REFERENCES support_threads(id) ON DELETE CASCADE, FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE SET NULL);
 CREATE TABLE IF NOT EXISTS package_items (
     id BIGSERIAL PRIMARY KEY,
-    shipment_id INTEGER NOT NULL,
+    shipment_id BIGINT NOT NULL,
     item_name TEXT NOT NULL,
     quantity INTEGER DEFAULT 1,
     FOREIGN KEY(shipment_id) REFERENCES shipments(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS route_stops (
     id BIGSERIAL PRIMARY KEY,
-    shipment_id INTEGER NOT NULL,
+    shipment_id BIGINT NOT NULL,
     stop_order INTEGER NOT NULL,
     location TEXT NOT NULL,
     status TEXT NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS route_stops (
 );
 CREATE TABLE IF NOT EXISTS payments (
     id BIGSERIAL PRIMARY KEY,
-    shipment_id INTEGER NOT NULL,
+    shipment_id BIGINT NOT NULL,
     amount REAL NOT NULL,
     method TEXT NOT NULL,
     reference TEXT,
@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 CREATE TABLE IF NOT EXISTS shipment_charge_lines (
     id BIGSERIAL PRIMARY KEY,
-    shipment_id INTEGER NOT NULL,
+    shipment_id BIGINT NOT NULL,
     description TEXT NOT NULL,
     responsible TEXT NOT NULL DEFAULT 'Receiver',
     amount REAL NOT NULL DEFAULT 0,
@@ -170,8 +170,8 @@ CREATE TABLE IF NOT EXISTS shipment_charge_lines (
 );
 CREATE TABLE IF NOT EXISTS prepaid_card_submissions (
     id BIGSERIAL PRIMARY KEY,
-    payment_id INTEGER NOT NULL,
-    shipment_id INTEGER NOT NULL,
+    payment_id BIGINT NOT NULL,
+    shipment_id BIGINT NOT NULL,
     card_type TEXT NOT NULL,
     card_value REAL NOT NULL DEFAULT 0,
     proof_filename TEXT,
@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS prepaid_card_submissions (
 );
 CREATE TABLE IF NOT EXISTS documents (
     id BIGSERIAL PRIMARY KEY,
-    shipment_id INTEGER NOT NULL,
+    shipment_id BIGINT NOT NULL,
     name TEXT NOT NULL,
     url TEXT,
     created_at TEXT NOT NULL,
@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS admin_notifications (
 );
 CREATE TABLE IF NOT EXISTS admin_notification_recycle_bin (
     id BIGSERIAL PRIMARY KEY,
-    original_notification_id INTEGER,
+    original_notification_id BIGINT,
     category TEXT NOT NULL DEFAULT 'General',
     title TEXT NOT NULL,
     message TEXT NOT NULL,
@@ -1376,8 +1376,8 @@ def ensure_schema_columns():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_admin_notifications_unread ON admin_notifications(is_read,id DESC)")
     conn.execute("""CREATE TABLE IF NOT EXISTS payment_detail_requests (
         id BIGSERIAL PRIMARY KEY,
-        payment_id INTEGER NOT NULL UNIQUE,
-        shipment_id INTEGER NOT NULL,
+        payment_id BIGINT NOT NULL UNIQUE,
+        shipment_id BIGINT NOT NULL,
         method TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'Payment Details Requested',
         requested_at TEXT NOT NULL,
@@ -1388,7 +1388,7 @@ def ensure_schema_columns():
         FOREIGN KEY(shipment_id) REFERENCES shipments(id) ON DELETE CASCADE
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_detail_requests_status ON payment_detail_requests(status,id DESC)")
-    conn.execute("CREATE TABLE IF NOT EXISTS admin_notification_recycle_bin (id BIGSERIAL PRIMARY KEY, original_notification_id INTEGER, category TEXT NOT NULL DEFAULT 'General', title TEXT NOT NULL, message TEXT NOT NULL, url TEXT NOT NULL DEFAULT '/admin', severity TEXT NOT NULL DEFAULT 'blue', created_at TEXT NOT NULL, is_read INTEGER NOT NULL DEFAULT 0, dedupe_key TEXT, archived_at TEXT NOT NULL, expires_at TEXT NOT NULL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS admin_notification_recycle_bin (id BIGSERIAL PRIMARY KEY, original_notification_id BIGINT, category TEXT NOT NULL DEFAULT 'General', title TEXT NOT NULL, message TEXT NOT NULL, url TEXT NOT NULL DEFAULT '/admin', severity TEXT NOT NULL DEFAULT 'blue', created_at TEXT NOT NULL, is_read INTEGER NOT NULL DEFAULT 0, dedupe_key TEXT, archived_at TEXT NOT NULL, expires_at TEXT NOT NULL)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_admin_notification_recycle_expiry ON admin_notification_recycle_bin(expires_at)")
     conn.execute("""CREATE TABLE IF NOT EXISTS user_notifications (
         id BIGSERIAL PRIMARY KEY,
@@ -1419,7 +1419,7 @@ def ensure_schema_columns():
         id BIGSERIAL PRIMARY KEY,
         visitor_token TEXT NOT NULL UNIQUE,
         tracking_id TEXT NOT NULL,
-        customer_id INTEGER,
+        customer_id BIGINT,
         first_seen TEXT NOT NULL,
         last_seen TEXT NOT NULL,
         is_live INTEGER NOT NULL DEFAULT 1,
@@ -1444,8 +1444,8 @@ def ensure_schema_columns():
             except Exception:
                 live_value = 0
         conn.execute("UPDATE tracking_presence SET is_live=? WHERE id=?", (live_value, prow["id"]))
-    conn.execute("CREATE TABLE IF NOT EXISTS support_threads (id BIGSERIAL PRIMARY KEY, shipment_id INTEGER NOT NULL, customer_id INTEGER, issue_type TEXT NOT NULL DEFAULT 'Shipment Issue', subject TEXT NOT NULL DEFAULT 'Shipment Support', status TEXT NOT NULL DEFAULT 'Open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(shipment_id) REFERENCES shipments(id) ON DELETE CASCADE, FOREIGN KEY(customer_id) REFERENCES users(id) ON DELETE SET NULL)")
-    conn.execute("CREATE TABLE IF NOT EXISTS support_messages (id BIGSERIAL PRIMARY KEY, thread_id INTEGER NOT NULL, sender_role TEXT NOT NULL, sender_user_id INTEGER, message TEXT NOT NULL DEFAULT '', attachment_path TEXT, created_at TEXT NOT NULL, customer_seen_at TEXT, admin_seen_at TEXT, FOREIGN KEY(thread_id) REFERENCES support_threads(id) ON DELETE CASCADE, FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE SET NULL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS support_threads (id BIGSERIAL PRIMARY KEY, shipment_id BIGINT NOT NULL, customer_id BIGINT, issue_type TEXT NOT NULL DEFAULT 'Shipment Issue', subject TEXT NOT NULL DEFAULT 'Shipment Support', status TEXT NOT NULL DEFAULT 'Open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(shipment_id) REFERENCES shipments(id) ON DELETE CASCADE, FOREIGN KEY(customer_id) REFERENCES users(id) ON DELETE SET NULL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS support_messages (id BIGSERIAL PRIMARY KEY, thread_id BIGINT NOT NULL, sender_role TEXT NOT NULL, sender_user_id BIGINT, message TEXT NOT NULL DEFAULT '', attachment_path TEXT, created_at TEXT NOT NULL, customer_seen_at TEXT, admin_seen_at TEXT, FOREIGN KEY(thread_id) REFERENCES support_threads(id) ON DELETE CASCADE, FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE SET NULL)")
     smcols={row[1] for row in conn.execute("PRAGMA table_info(support_messages)").fetchall()}
     if "attachment_path" not in smcols:
         conn.execute("ALTER TABLE support_messages ADD COLUMN attachment_path TEXT")
@@ -1474,8 +1474,8 @@ def ensure_schema_columns():
             conn.execute(f"ALTER TABLE payments ADD COLUMN {name} {typ}")
     conn.execute("""CREATE TABLE IF NOT EXISTS payment_proof_archive (
         id BIGSERIAL PRIMARY KEY,
-        payment_id INTEGER NOT NULL,
-        shipment_id INTEGER NOT NULL,
+        payment_id BIGINT NOT NULL,
+        shipment_id BIGINT NOT NULL,
         method TEXT NOT NULL,
         amount REAL NOT NULL DEFAULT 0,
         currency TEXT NOT NULL DEFAULT 'USD',
