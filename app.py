@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import sqlite3
 import os
+import shutil
 import secrets
 import json
 import math
@@ -38,8 +39,41 @@ SHIPMENT_HOLD_BANNER_URI = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2
 PERSISTENT_DATA_DIR = "/var/data"
 if os.path.isdir(PERSISTENT_DATA_DIR) and os.access(PERSISTENT_DATA_DIR, os.W_OK):
     DB_PATH = os.path.join(PERSISTENT_DATA_DIR, "ys_logistics.db")
+    # Keep the existing /static upload URLs while storing the actual files on the
+    # Render Persistent Disk through symlinks.
+    SUPPORT_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "support_uploads")
+    PAYMENT_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "payment_uploads")
+    QR_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "payment_qr")
+    for _name, _static_dir in (("support_uploads", SUPPORT_UPLOAD_DIR), ("payment_uploads", PAYMENT_UPLOAD_DIR), ("payment_qr", QR_UPLOAD_DIR)):
+        _persistent_dir = os.path.join(PERSISTENT_DATA_DIR, _name)
+        os.makedirs(_persistent_dir, exist_ok=True)
+        if os.path.lexists(_static_dir) and not os.path.islink(_static_dir):
+            if os.path.isdir(_static_dir):
+                _entries = os.listdir(_static_dir)
+                try:
+                    for _entry in _entries:
+                        _src = os.path.join(_static_dir, _entry)
+                        _dst = os.path.join(_persistent_dir, _entry)
+                        if os.path.isfile(_src) and not os.path.exists(_dst):
+                            shutil.copy2(_src, _dst)
+                    shutil.rmtree(_static_dir)
+                except OSError:
+                    pass
+            else:
+                try:
+                    os.remove(_static_dir)
+                except OSError:
+                    pass
+        if not os.path.lexists(_static_dir):
+            try:
+                os.symlink(_persistent_dir, _static_dir, target_is_directory=True)
+            except OSError:
+                pass
 else:
     DB_PATH = os.path.join(BASE_DIR, "ys_logistics.db")
+    SUPPORT_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "support_uploads")
+    PAYMENT_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "payment_uploads")
+    QR_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "payment_qr")
 app = Flask(__name__)
 # Keep the local session signing key stable between server restarts.
 # A changing secret key logs the browser out every time Flask restarts.
