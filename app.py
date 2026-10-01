@@ -4421,8 +4421,33 @@ def shipment_payment_receipt_image(tracking_id):
 
     W,H=1240,1850
     try:
-        regular_path=os.path.join(os.environ.get("WINDIR",r"C:\Windows"),"Fonts","arial.ttf")
-        bold_path=os.path.join(os.environ.get("WINDIR",r"C:\Windows"),"Fonts","arialbd.ttf")
+        # Keep the Windows Arial fonts when the app is running locally, but
+        # use equivalent installed Linux fonts when running on Render.
+        # Render does not have C:\Windows\Fonts\arial*.ttf.
+        font_roots = [
+            os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
+            "/usr/share/fonts/truetype/dejavu",
+            "/usr/share/fonts/truetype/liberation2",
+            "/usr/share/fonts/truetype/liberation",
+        ]
+        regular_candidates = [
+            os.path.join(font_roots[0], "arial.ttf"),
+            os.path.join(font_roots[1], "DejaVuSans.ttf"),
+            os.path.join(font_roots[2], "LiberationSans-Regular.ttf"),
+            os.path.join(font_roots[3], "LiberationSans-Regular.ttf"),
+        ]
+        bold_candidates = [
+            os.path.join(font_roots[0], "arialbd.ttf"),
+            os.path.join(font_roots[1], "DejaVuSans-Bold.ttf"),
+            os.path.join(font_roots[2], "LiberationSans-Bold.ttf"),
+            os.path.join(font_roots[3], "LiberationSans-Bold.ttf"),
+        ]
+
+        regular_path=next((path for path in regular_candidates if os.path.exists(path)), None)
+        bold_path=next((path for path in bold_candidates if os.path.exists(path)), None)
+        if not regular_path or not bold_path:
+            raise OSError("No suitable receipt font was found on this server.")
+
         f_title=ImageFont.truetype(bold_path,50)
         f_header=ImageFont.truetype(bold_path,42)
         f_section=ImageFont.truetype(bold_path,34)
@@ -4436,6 +4461,8 @@ def shipment_payment_receipt_image(tracking_id):
         f_note_b=ImageFont.truetype(bold_path,23)
     except Exception:
         f_title=f_header=f_section=f_label=f_value=f_body=f_body_b=f_small=f_small_b=f_note=f_note_b=ImageFont.load_default()
+        regular_path=""
+        bold_path=""
 
     navy=(5,55,100); blue=(8,139,224); red=(201,54,74); green=(12,139,96)
     dark=(8,38,60); muted=(43,67,84); border=(201,219,232); light=(239,247,252); white=(255,255,255)
