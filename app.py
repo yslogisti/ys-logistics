@@ -6075,9 +6075,26 @@ def shipment_route(tracking_id):
             settings_conn=db()
             route_google_key=(settings_conn.execute("SELECT setting_value FROM admin_settings WHERE setting_key=?",("google_maps_api_key",)).fetchone() or [""])[0]
             settings_conn.close()
-            repair_origin=', '.join(x for x in [s["origin_city"], s["origin_region"], s["origin_country"]] if x)
-            repair_destination=', '.join(x for x in [s["destination_city"], s["destination_region"], s["destination_country"]] if x)
-            repaired=generate_route_data(repair_origin,repair_destination,mode if "mode" in locals() else (s["transport_mode"] or "Air Freight"),route_google_key)
+            repair_mode=(s["transport_mode"] or "Air Freight").strip() or "Air Freight"
+            repair_attempts=[]
+            city_origin=', '.join(x for x in [s["origin_city"], s["origin_region"], s["origin_country"]] if x)
+            city_destination=', '.join(x for x in [s["destination_city"], s["destination_region"], s["destination_country"]] if x)
+            country_origin=str(s["origin_country"] or "").strip()
+            country_destination=str(s["destination_country"] or "").strip()
+            for repair_origin,repair_destination in [(city_origin,city_destination),(country_origin,country_destination)]:
+                pair=(repair_origin,repair_destination)
+                if repair_origin and repair_destination and pair not in repair_attempts:
+                    repair_attempts.append(pair)
+            repaired=None
+            repair_error=None
+            for repair_origin,repair_destination in repair_attempts:
+                try:
+                    repaired=generate_route_data(repair_origin,repair_destination,repair_mode,route_google_key)
+                    break
+                except Exception as exc:
+                    repair_error=exc
+            if not repaired:
+                raise ValueError("Could not repair shipment map coordinates.") from repair_error
             origin_lat=repaired["origin"]["lat"]
             origin_lng=repaired["origin"]["lng"]
             dest_lat=repaired["destination"]["lat"]
@@ -7814,7 +7831,10 @@ def admin_new_shipment():
             # only after the admin explicitly presses Start Now.
             movement_started_at=None
             movement_arrival_at=None
-            cur=conn.execute("INSERT INTO shipments(tracking_id,customer_id,sender_name,sender_address,sender_phone,receiver_name,receiver_phone,receiver_email,origin_country,origin_city,origin_region,destination_country,destination_city,destination_region,destination_address,origin_address,carrier,service,status,current_location,shipment_date,estimated_delivery,delivery_days_left,package_type,package_size,weight,dimensions,pieces,declared_value,currency,total_amount,paid_amount,outstanding_balance,payment_status,payment_method,package_image,created_at,origin_latitude,origin_longitude,destination_latitude,destination_longitude,route_distance_km,route_duration_minutes,transport_mode,route_source,route_summary,incoterm,payment_arrangement,tracking_enabled,movement_mode,movement_started_at,movement_duration_days,movement_arrival_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(tracking,int(f["customer_id"]) if f.get("customer_id") else None,f.get("sender_name"),f.get("sender_address"),f.get("sender_phone"),f.get("receiver_name"),f.get("receiver_phone"),f.get("receiver_email"),origin_country,origin_city,origin_region,destination_country,destination_city,destination_region,da,oa,f.get("carrier") or settings.get("default_carrier","DHL"),f.get("service") or settings.get("default_service","International Express"),f.get("status") or "Shipment Created",f.get("current_location") or f.get("origin_city"),f.get("shipment_date"),estimated_delivery,(int(f.get("delivery_days_left")) if str(f.get("delivery_days_left") or "").strip().isdigit() else None),f.get("package_type") or "Box",f.get("package_size") or "Medium",num("weight"),f.get("dimensions"),int(f.get("pieces") or 1),num("declared_value"),f.get("currency") or settings.get("default_currency","USD"),total,paid,balance,pay_status,f.get("payment_method"),package_image,now,olat,olng,dlat,dlng,rd,rdur,mode,rs,rsum,f.get("incoterm") or "DAP",f.get("payment_arrangement") or "",int(f.get("tracking_enabled") or 1),movement_mode,movement_started_at,movement_duration_days,movement_arrival_at))
+            shipment_values=(tracking,int(f["customer_id"]) if f.get("customer_id") else None,f.get("sender_name"),f.get("sender_address"),f.get("sender_phone"),f.get("receiver_name"),f.get("receiver_phone"),f.get("receiver_email"),origin_country,origin_city,origin_region,destination_country,destination_city,destination_region,da,oa,f.get("carrier") or settings.get("default_carrier","DHL"),f.get("service") or settings.get("default_service","International Express"),f.get("status") or "Shipment Created",f.get("current_location") or f.get("origin_city"),f.get("shipment_date"),estimated_delivery,(int(f.get("delivery_days_left")) if str(f.get("delivery_days_left") or "").strip().isdigit() else None),f.get("package_type") or "Box",f.get("package_size") or "Medium",num("weight"),f.get("dimensions"),int(f.get("pieces") or 1),num("declared_value"),f.get("currency") or settings.get("default_currency","USD"),total,paid,balance,pay_status,f.get("payment_method"),package_image,now,olat,olng,dlat,dlng,rd,rdur,mode,rs,rsum,f.get("incoterm") or "DAP",f.get("payment_arrangement") or "",int(f.get("tracking_enabled") or 1),movement_mode,movement_started_at,movement_duration_days,movement_arrival_at)
+            shipment_columns="tracking_id,customer_id,sender_name,sender_address,sender_phone,receiver_name,receiver_phone,receiver_email,origin_country,origin_city,origin_region,destination_country,destination_city,destination_region,destination_address,origin_address,carrier,service,status,current_location,shipment_date,estimated_delivery,delivery_days_left,package_type,package_size,weight,dimensions,pieces,declared_value,currency,total_amount,paid_amount,outstanding_balance,payment_status,payment_method,package_image,created_at,origin_latitude,origin_longitude,destination_latitude,destination_longitude,route_distance_km,route_duration_minutes,transport_mode,route_source,route_summary,incoterm,payment_arrangement,tracking_enabled,movement_mode,movement_started_at,movement_duration_days,movement_arrival_at"
+            shipment_placeholders=",".join("?" for _ in shipment_values)
+            cur=conn.execute(f"INSERT INTO shipments({shipment_columns}) VALUES({shipment_placeholders})",shipment_values)
             sid=cur.lastrowid
             connection_names=[x.strip() for x in f.getlist("route_connection[]") if x.strip()]
             route_rows=[]
